@@ -1,0 +1,14 @@
+% mini fixture title frame.
+\begin{frame}[plain]
+% escaped (NO | latexescape filter):
+HEADLINE: {{ title }}
+% unescaped via raw_fields:
+RAW: {{ raw_fields['title'] }}
+<% if raw_fields.get('author') %>
+AUTHOR: {{ author }}
+<% endif %>
+% logos loop:
+<% for logo in logos %>
+\includegraphics[height={{ logo.height }}]{{ '{' }}{{ assets_dir }}/{{ logo.file }}{{ '}' }}
+<% endfor %>
+\end{frame}

@@ -1,0 +1,22 @@
+name: mini
+palette:
+  primary: "112233"
+  accent: "AABBCC"
+font:
+  sans: "Latin Modern Sans"
+  fallback: "Helvetica"
+logos:
+  - file: one.png
+    height: "1cm"
+  - file: two.png
+    height: "0.8cm"
+required_fields:
+  - title
+optional_fields:
+  - author
+  - fontsize
+font_scales:
+  small: "10pt"
+  normal: "11pt"
+  large: "12pt"
+default_font_scale: normal

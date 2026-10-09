@@ -1,0 +1,43 @@
+# md2pdf — neutral "default" theme.
+# Brand-free. Requires only `title`; everything else is optional.
+# NO `headline` expression (critique E2): the headline is composed in
+# title.tex.j2 directly from `title`.
+
+name: default
+
+# Generic, neutral palette (no brand colours). Exposed to templates as
+# `palette.<key>` and used to define LaTeX colours in preamble.tex.j2.
+palette:
+  primary:   "2A4B7C"   # muted navy — structure / frame titles
+  secondary: "4A739C"   # steel blue — subtitles / links
+  accent:    "6FA8DC"   # soft blue — rules / bullets
+  dark:      "222222"   # body text
+  light:     "E8EEF5"   # tint for blocks / callouts
+  grey:      "555555"   # captions / footer
+
+# Font family: a safe default sans with a Helvetica fallback.
+font:
+  sans: "Latin Modern Sans"
+  fallback: "Helvetica"
+
+# No logos in the neutral theme (the loop renders nothing).
+logos: []
+
+# Only `title` is required; the rest are recognised but optional (critique P3).
+required_fields:
+  - title
+optional_fields:
+  - author
+  - date
+  - subtitle
+  - fontsize
+  - short_title
+
+# Named body-font scales (carried over from the legacy tool).
+font_scales:
+  xsmall: "8pt"
+  small:  "10pt"
+  normal: "11pt"
+  large:  "12pt"
+  xlarge: "14pt"
+default_font_scale: normal

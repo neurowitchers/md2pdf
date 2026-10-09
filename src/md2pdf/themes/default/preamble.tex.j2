@@ -1,0 +1,106 @@
+% =====================================================================
+% md2pdf default theme — neutral, brand-free Beamer preamble.
+% Generic palette, a safe default sans font with a Helvetica fallback, and
+% no logos. Rendered from theme.yaml via Jinja2 (values pre-escaped in the
+% context; no per-token escape filter needed).
+% =====================================================================
+
+\usetheme{default}
+\usecolortheme{default}
+\usepackage{tikz}
+\setbeamertemplate{navigation symbols}{}   % no nav clutter
+
+% ---- Fonts: safe default sans via fontspec (xelatex, Unicode-native) --
+\usepackage{fontspec}
+\IfFontExistsTF{{ '{' }}{{ font.sans }}{{ '}' }}{\setsansfont{{ '{' }}{{ font.sans }}{{ '}' }}}{\setsansfont{{ '{' }}{{ font.fallback }}{{ '}' }}}
+\renewcommand{\familydefault}{\sfdefault}
+
+% ---- Unicode fallbacks: superscripts, arrows, dashes -----------------
+\usepackage{newunicodechar}
+\newunicodechar{⁻}{\textsuperscript{\textminus}}
+\newunicodechar{⁰}{\textsuperscript{0}}
+\newunicodechar{¹}{\textsuperscript{1}}
+\newunicodechar{²}{\textsuperscript{2}}
+\newunicodechar{³}{\textsuperscript{3}}
+\newunicodechar{⁴}{\textsuperscript{4}}
+\newunicodechar{⁵}{\textsuperscript{5}}
+\newunicodechar{⁶}{\textsuperscript{6}}
+\newunicodechar{⁷}{\textsuperscript{7}}
+\newunicodechar{⁸}{\textsuperscript{8}}
+\newunicodechar{⁹}{\textsuperscript{9}}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{–}{--}
+\newunicodechar{—}{---}
+
+% ---- Palette (from theme.yaml) ---------------------------------------
+\usepackage{xcolor}
+<% for key, hex in palette.items() -%>
+\definecolor{theme{{ key }}}{HTML}{{ '{' }}{{ hex }}{{ '}' }}
+<% endfor %>
+% ---- Element colours -------------------------------------------------
+\setbeamercolor{normal text}{fg=themedark,bg=white}
+\setbeamercolor{structure}{fg=themeprimary}
+\setbeamercolor{frametitle}{fg=white,bg=themeprimary}
+\setbeamercolor{title}{fg=themeprimary}
+\setbeamercolor{subtitle}{fg=themesecondary}
+\setbeamercolor{itemize item}{fg=themeaccent}
+\setbeamercolor{itemize subitem}{fg=themesecondary}
+\setbeamercolor{enumerate item}{fg=themeaccent}
+\setbeamercolor{block title}{fg=white,bg=themesecondary}
+\setbeamercolor{block body}{fg=themedark,bg=themelight!40}
+\setbeamercolor{quotation}{fg=themegrey}
+
+% Caption colour for engine-generated picture/diagram captions (theme-agnostic
+% hook: the engine emits \color{captioncolor}).
+\colorlet{captioncolor}{themegrey}
+
+\setbeamerfont{frametitle}{series=\bfseries,size=\large}
+\setbeamerfont{title}{series=\bfseries,size=\Huge}
+\setbeamerfont{block title}{series=\bfseries}
+
+% ---- Bullets ---------------------------------------------------------
+\setbeamertemplate{itemize item}{\small\raise0.5pt\hbox{\donotcoloroutermaths$\blacktriangleright$}}
+\setbeamertemplate{itemize subitem}{\footnotesize\raise0.5pt\hbox{\donotcoloroutermaths$\blacktriangleright$}}
+\setbeamertemplate{itemize subsubitem}{\scriptsize\raise0.5pt\hbox{\donotcoloroutermaths$\bullet$}}
+
+% ---- Frame title: colored band across the top -----------------------
+\setbeamertemplate{frametitle}{%
+  \nointerlineskip%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=2.6ex,dp=1.2ex,leftskip=0.6cm,rightskip=0.6cm]{frametitle}%
+    \usebeamerfont{frametitle}\insertframetitle%
+  \end{beamercolorbox}%
+  {\color{themeaccent}\rule{\paperwidth}{1.2pt}}%
+}
+
+% ---- Footer: short title + page number (no logos) --------------------
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.62\paperwidth,ht=3.2ex,dp=1.4ex,leftskip=0.6cm]{}%
+      \tiny\color{themegrey}\insertshorttitle%
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.38\paperwidth,ht=3.2ex,dp=1.4ex,rightskip=0.6cm]{}%
+      \hfill\tiny\color{themegrey}\insertframenumber\,/\,\inserttotalframenumber%
+    \end{beamercolorbox}%
+  }%
+  \vskip0pt%
+}
+
+% ---- Table styling ---------------------------------------------------
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{colortbl}
+\arrayrulecolor{themeaccent}
+\renewcommand{\arraystretch}{1.25}
+
+% ---- Blockquote -> tinted callout ------------------------------------
+\usepackage{framed}
+\usepackage{tcolorbox}
+\renewenvironment{quote}%
+  {\begin{tcolorbox}[colback=themelight!35,colframe=themeaccent,boxrule=0.4pt,
+      left=6pt,right=6pt,top=4pt,bottom=4pt,arc=1pt]}%
+  {\end{tcolorbox}}
+
+% ---- Links -----------------------------------------------------------
+\hypersetup{colorlinks=true,linkcolor=themesecondary,urlcolor=themesecondary}

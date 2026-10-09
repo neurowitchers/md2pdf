@@ -1,0 +1,25 @@
+% md2pdf default theme — title frame.
+% Headline composed directly from `title` (critique E2). Optional subtitle,
+% author, and date are rendered only when present. Field values arrive in the
+% context already LaTeX-escaped (critique P5), so no filter is needed.
+\begingroup
+\setbeamertemplate{footline}{}
+\begin{frame}[plain]
+\vfill
+\begingroup
+\raggedright
+{\usebeamercolor[fg]{title}\usebeamerfont{title}\bfseries {{ title }}\par}
+<% if raw_fields.get('subtitle') %>
+\vskip0.6em{\usebeamercolor[fg]{subtitle}\Large {{ subtitle }}\par}
+<% endif %>
+\vskip0.4em{\color{themeaccent}\rule{0.35\paperwidth}{1.4pt}}\par
+<% if raw_fields.get('author') or raw_fields.get('date') %>
+\vskip0.8em{\color{themegrey}\small
+<%- if raw_fields.get('author') %> {{ author }}<% endif %>
+<%- if raw_fields.get('author') and raw_fields.get('date') %> \quad\textbullet\quad <% endif %>
+<%- if raw_fields.get('date') %>{{ date }}<% endif %>\par}
+<% endif %>
+\endgroup
+\vfill
+\end{frame}
+\endgroup

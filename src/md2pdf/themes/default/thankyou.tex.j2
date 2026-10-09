@@ -1,0 +1,22 @@
+% md2pdf default theme — thank-you frame.
+% Simple centred "Thank you!". An optional logo loop is included for parity
+% with branded themes; the neutral theme ships no logos, so it renders nothing.
+\begingroup
+\setbeamertemplate{footline}{}
+\begin{frame}[plain]
+\vfill
+\begin{center}
+{\usebeamercolor[fg]{title}\Huge\bfseries Thank you!}
+<% if logos %>
+\vskip1.2em
+\noindent\makebox[\textwidth]{%
+<% for logo in logos %>
+\includegraphics[height={{ logo.get('height', '1cm') }}]{{ '{' }}{{ assets_dir }}/{{ logo.file }}{{ '}' }}%
+<% if not loop.last %>\hfill<% endif %>
+<% endfor %>
+}
+<% endif %>
+\end{center}
+\vfill
+\end{frame}
+\endgroup

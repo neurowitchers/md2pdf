@@ -1,0 +1,7 @@
+% mini fixture preamble.
+\usepackage{xcolor}
+<% for key, hex in palette.items() -%>
+\definecolor{theme{{ key }}}{HTML}{{ '{' }}{{ hex }}{{ '}' }}
+<% endfor %>
+\sansfont{{ '{' }}{{ font.sans }}{{ '}' }}
+% font scale: {{ font_scale }}
