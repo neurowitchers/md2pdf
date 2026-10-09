@@ -24,9 +24,20 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/md2pdf"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/md2pdf/themes" = "md2pdf/themes"
+# The themes/ subpackage is already included via `packages`; declare its
+# non-Python data files (theme.yaml, Jinja templates, logo assets) as build
+# artifacts so they ship in the wheel. (Do NOT force-include the whole themes
+# dir — that would re-add themes/__init__.py and fail the build.)
+artifacts = [
+    "src/md2pdf/themes/**/*.yaml",
+    "src/md2pdf/themes/**/*.yml",
+    "src/md2pdf/themes/**/*.j2",
+    "src/md2pdf/themes/**/*.png",
+    "src/md2pdf/themes/**/*.jpg",
+    "src/md2pdf/themes/**/*.jpeg",
+    "src/md2pdf/themes/**/*.pdf",
+    "src/md2pdf/themes/**/*.svg",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
