@@ -57,11 +57,12 @@ def test_build_diagram_example_deck_produces_pdf(tmp_path):
 
 
 @pytest.mark.skipif(
-    not _diagram_toolchain(),
-    reason="pandoc/xelatex/d2/mmdr not all available",
+    not (_pandoc_xelatex() and bool(shutil.which("d2"))),
+    reason="pandoc/xelatex/d2 not all available",
 )
 def test_build_two_column_example_deck_produces_pdf(tmp_path):
-    # The two-column demo exercises a picture column and a d2-diagram column.
+    # The two-column demo exercises a picture column and a d2-diagram column
+    # (no mermaid, so mmdr is not required).
     src = EXAMPLES / "two-column-demo.md"
     assert src.is_file(), f"missing example deck: {src}"
     out_pdf = tmp_path / "two-column-demo.pdf"

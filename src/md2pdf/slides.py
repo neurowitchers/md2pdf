@@ -267,19 +267,24 @@ def match_two_column_slide(chunk: str) -> dict | None:
     """
     lines = chunk.splitlines()
 
-    # Parse the first heading (if any) up front for identification.
+    # Parse the first heading up front for identification. The `# Title` MUST be
+    # the strict first non-blank line of the chunk (as in match_picture_slide /
+    # match_diagram_slide). If any non-blank content precedes it, this is not a
+    # two-column slide — return None so the slide is handled untouched and its
+    # pre-heading content is never silently dropped (code-review HIGH, R1/R6).
     title: str | None = None
     first_non_blank = ""
     for raw in lines:
         s = raw.strip()
         if not s:
             continue
-        if not first_non_blank:
-            first_non_blank = s
+        first_non_blank = s
         hm = _H1_RE.match(s)
         if hm:
             title = hm.group("title").strip()
         break  # only inspect the first non-blank line here
+    if title is None:
+        return None
 
     # Scan the body (after the first heading line) fence-aware, recording the
     # first non-blank post-title line and every top-level `:::` delimiter.

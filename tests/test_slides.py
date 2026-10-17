@@ -265,3 +265,33 @@ def test_classify_region_image_diagram_markdown():
     assert slides.classify_region("- a\n- b")[0] == "markdown"
     # image mixed with other content -> markdown
     assert slides.classify_region("![a](x.png)\n- note")[0] == "markdown"
+
+
+def test_match_two_column_pre_heading_content_is_none():
+    # Code-review HIGH: non-blank content before `# Title` must NOT be hijacked
+    # as a two-column slide (which would drop the title and the prose). The
+    # title must be the strict first non-blank line, else -> None.
+    chunk = "intro prose\n\n# T\n\n:::\nleft\n:::\nright\n:::\n"
+    assert slides.match_two_column_slide(chunk) is None
+
+
+def test_match_two_column_empty_right_region_fails():
+    with pytest.raises(SystemExit) as ei:
+        slides.match_two_column_slide("# T\n\n:::\nleft\n:::\n   \n:::\n")
+    assert "right" in str(ei.value) and "empty" in str(ei.value)
+
+
+def test_match_two_column_two_image_columns():
+    chunk = "# T\n\n:::\n![a](l.png)\n:::\n![b](r.png)\n:::\n"
+    got = slides.match_two_column_slide(chunk)
+    assert got is not None
+    assert slides.classify_region(got["left"]) == ("image", "a", "l.png")
+    assert slides.classify_region(got["right"]) == ("image", "b", "r.png")
+
+
+def test_match_two_column_mixed_media_diagram_left_image_right():
+    chunk = f"# T\n\n:::\n```d2\n{D2_SRC}\n```\n:::\n![b](r.png)\n:::\n"
+    got = slides.match_two_column_slide(chunk)
+    assert got is not None
+    assert slides.classify_region(got["left"])[0] == "diagram"
+    assert slides.classify_region(got["right"])[0] == "image"
