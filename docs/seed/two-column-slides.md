@@ -3,8 +3,8 @@ generated-by: "Seed"
 source: docs/brainstorms/two-column-slides-brainstorm.md
 generated-at: 2026-10-17T22:54:43+03:00
 draft: false
-consumed: false
-consumed-at:
+consumed: true
+consumed-at: 2026-10-17T22:54:43+03:00
 ---
 
 # Seed: Two-Column (Picture + Text) Slides
