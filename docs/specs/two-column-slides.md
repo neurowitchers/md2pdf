@@ -2,7 +2,7 @@
 generated-by: "Plan Spec"
 source: docs/seed/two-column-slides.md
 generated-at: 2026-10-17T22:54:43+03:00
-status: critiqued
+status: split
 critiqued-revision: f391d6a
 ---
 
