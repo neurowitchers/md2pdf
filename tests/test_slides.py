@@ -4,6 +4,8 @@ Migrated from the legacy tools/md2pdf/test_md2pdf.py (theme-agnostic subset).
 """
 from __future__ import annotations
 
+import pytest
+
 from md2pdf import slides
 
 
@@ -162,3 +164,104 @@ def test_chunk_has_diagram_fence_parameterised_token():
     assert slides._chunk_has_diagram_fence("```python\nx\n```") is False
     assert slides._chunk_has_diagram_fence("```\nx\n```") is False
     assert slides._chunk_has_diagram_fence("```mermaid\nx\n```") is True
+
+
+
+# --- match_two_column_slide + classify_region ------------------------------
+
+def test_match_two_column_valid_image_and_bullets():
+    chunk = "# T\n\n:::\n![a](p.png)\n:::\n- one\n- two\n:::\n"
+    got = slides.match_two_column_slide(chunk)
+    assert got == {"title": "T", "left": "![a](p.png)", "right": "- one\n- two"}
+
+
+def test_match_two_column_valid_text_left_image_right():
+    chunk = "# T\n\n:::\n- a\n- b\n:::\n![x](q.png)\n:::\n"
+    got = slides.match_two_column_slide(chunk)
+    assert got is not None
+    assert got["left"] == "- a\n- b"
+    assert got["right"] == "![x](q.png)"
+
+
+def test_match_two_column_diagram_region():
+    chunk = f"# T\n\n:::\n```d2\n{D2_SRC}\n```\n:::\n- note\n:::\n"
+    got = slides.match_two_column_slide(chunk)
+    assert got is not None
+    assert slides.classify_region(got["left"])[0] == "diagram"
+
+
+def test_match_two_column_no_colon_is_none():
+    # Ordinary slide: not two-column (R6 opt-in).
+    assert slides.match_two_column_slide("# T\n\n- a\n- b\n") is None
+
+
+def test_match_two_column_pandoc_div_not_hijacked():
+    # An ordinary slide carrying a Pandoc fenced div (bare ::: closes it) does
+    # NOT open with :::, so it is passed through untouched (R6, task-level P1).
+    chunk = "# T\n\nsome prose\n\n::: notes\nspeaker note\n:::\n"
+    assert slides.match_two_column_slide(chunk) is None
+
+
+def test_match_two_column_two_delimiters_fails():
+    with pytest.raises(SystemExit):
+        slides.match_two_column_slide("# T\n\n:::\na\n:::\nb\n")
+
+
+def test_match_two_column_four_delimiters_fails():
+    with pytest.raises(SystemExit) as ei:
+        slides.match_two_column_slide("# T\n\n:::\na\n:::\nb\n:::\nc\n:::\n")
+    assert "T" in str(ei.value)
+
+
+def test_match_two_column_empty_region_fails():
+    with pytest.raises(SystemExit) as ei:
+        slides.match_two_column_slide("# T\n\n:::\n:::\n- x\n:::\n")
+    assert "empty" in str(ei.value)
+
+
+def test_match_two_column_trailing_content_fails():
+    with pytest.raises(SystemExit):
+        slides.match_two_column_slide("# T\n\n:::\na\n:::\nb\n:::\ntrailing\n")
+
+
+def test_match_two_column_trailing_blank_lines_tolerated():
+    got = slides.match_two_column_slide("# T\n\n:::\na\n:::\nb\n:::\n\n\n")
+    assert got is not None and got["right"] == "b"
+
+
+def test_match_two_column_unterminated_fence_precedence():
+    # Unterminated inner fence must be diagnosed before the delimiter count
+    # (task-level E2) — the message names the fence, not "expected 3".
+    with pytest.raises(SystemExit) as ei:
+        slides.match_two_column_slide(
+            "# T\n\n:::\n![a](p.png)\n:::\n```python\nx\n:::\n"
+        )
+    assert "unterminated" in str(ei.value).lower()
+
+
+def test_match_two_column_colon_inside_code_fence_is_content():
+    # ::: inside a code block is content, not a delimiter (critique E2).
+    chunk = "# T\n\n:::\n```python\n:::\nnot a delim\n```\n:::\n- right\n:::\n"
+    got = slides.match_two_column_slide(chunk)
+    assert got is not None and "not a delim" in got["left"]
+
+
+def test_match_two_column_indented_delimiter_tolerated():
+    # Up to 3 leading spaces on a ::: line is accepted (critique E8).
+    chunk = "# T\n\n  :::\na\n  :::\nb\n  :::\n"
+    got = slides.match_two_column_slide(chunk)
+    assert got is not None and got["left"] == "a" and got["right"] == "b"
+
+
+def test_match_two_column_duplicate_title_fails():
+    with pytest.raises(SystemExit):
+        slides.match_two_column_slide("# T\n\n:::\na\n:::\n# T2\nb\n:::\n")
+
+
+def test_classify_region_image_diagram_markdown():
+    assert slides.classify_region("![alt](x.png)") == ("image", "alt", "x.png")
+    kind, lang, _ = slides.classify_region(f"```d2\n{D2_SRC}\n```")
+    assert kind == "diagram" and lang == "d2"
+    assert slides.classify_region("- a\n- b")[0] == "markdown"
+    # image mixed with other content -> markdown
+    assert slides.classify_region("![a](x.png)\n- note")[0] == "markdown"

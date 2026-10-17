@@ -3,13 +3,13 @@ generated-by: "Split Tasks"
 source: docs/specs/two-column-slides.md
 generated-at: 2026-10-17T23:05:00+03:00
 inputs-ready: false
-completed: false
-status: not-started
+completed: true
+status: done
 ---
 
 # Task 02: Lower `:::` Two-Column Slides to Pandoc Columns in `engine.py`
 
-- [ ] **Completion**
+- [x] **Completion**
 - **Source spec**: `docs/specs/two-column-slides.md`
 - **Depends on**: `task-01-detector.md`
 - **Blocks**: `task-03-tests.md`, `task-04-docs-example.md`

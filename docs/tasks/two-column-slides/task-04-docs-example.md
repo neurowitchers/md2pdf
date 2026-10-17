@@ -3,13 +3,13 @@ generated-by: "Split Tasks"
 source: docs/specs/two-column-slides.md
 generated-at: 2026-10-17T23:05:00+03:00
 inputs-ready: false
-completed: false
-status: not-started
+completed: true
+status: done
 ---
 
 # Task 04: README Dialect Docs + `two-column-demo.md` Example + E2E Build
 
-- [ ] **Completion**
+- [x] **Completion**
 - **Source spec**: `docs/specs/two-column-slides.md`
 - **Depends on**: `task-02-lowering.md`
 - **Blocks**: `None`

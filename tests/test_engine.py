@@ -267,3 +267,90 @@ def test_forced_failure_preserves_diagnostics(tmp_path, capsys):
     for name in ("body.md", "preamble.tex", "before.tex", "after.tex"):
         assert (diag_dir / name).is_file()
     assert str(diag_dir) in err
+
+
+
+# --- column_body_tex / two-column lowering (theme-agnostic, no toolchain) ---
+def test_column_body_tex_top_aligned_no_vfill():
+    tex = engine.column_body_tex("", "x.png")
+    assert (
+        r"\includegraphics[width=\columnwidth,height=0.72\textheight,"
+        r"keepaspectratio]{x.png}" in tex
+    )
+    # Top-aligned: \centering declaration, no \vfill, no center environment
+    # (critique P2 / task-level E1).
+    assert r"{\centering" in tex
+    assert r"\vfill" not in tex
+    assert r"\begin{center}" not in tex
+
+
+def test_column_body_tex_caption_when_alt():
+    tex = engine.column_body_tex("Fig 1", "x.png")
+    assert r"\color{captioncolor}" in tex and "Fig 1" in tex
+
+
+def test_picture_body_tex_regression_unchanged():
+    # The refactor into _fit_image_tex must not change whole-slide output.
+    tex = engine.picture_body_tex("cap", "a.png")
+    assert tex == (
+        "\\vfill\n"
+        "\\begin{center}\n"
+        "\\includegraphics[width=\\textwidth,height=0.78\\textheight,"
+        "keepaspectratio]{a.png}\\par\n"
+        "\\vskip0.4em{\\small\\color{captioncolor}cap\\par}\n"
+        "\\end{center}\n"
+        "\\vfill\n"
+    )
+
+
+def test_preprocess_body_two_column_structure():
+    out = engine.preprocess_body(
+        "# T\n\n:::\n![alt](p.png)\n:::\n- one\n- two\n:::\n"
+    )
+    assert "{.columns .onlytextwidth align=top}" in out
+    assert out.count('{.column width="50%"}') == 2
+    assert (
+        r"\includegraphics[width=\columnwidth,height=0.72\textheight,"
+        r"keepaspectratio]{p.png}" in out
+    )
+    # right (markdown) region flows verbatim
+    assert "- one\n- two" in out
+    # no whole-slide vertical centring leaked into the column lowering
+    assert r"\vfill" not in out
+
+
+def test_preprocess_body_two_column_diagram_region(monkeypatch, tmp_path):
+    # Diagram-in-column lowering without requiring d2/mmdr (task-level E5):
+    # monkeypatch render_diagram to a fake rendered file.
+    fake = tmp_path / "diagram_d2_abc.pdf"
+    fake.write_bytes(b"%PDF-1.4\n")
+
+    def _fake_render(lang, source, out_dir, title):
+        return fake
+
+    monkeypatch.setattr(engine, "render_diagram", _fake_render)
+    out = engine.preprocess_body(
+        "# T\n\n:::\n```d2\na -> b\n```\n:::\n- note\n:::\n",
+        diagram_dir=tmp_path,
+    )
+    assert "{.columns .onlytextwidth align=top}" in out
+    # the diagram region was rewritten to a columnwidth-fit includegraphics by
+    # relative filename
+    assert r"\includegraphics[width=\columnwidth" in out
+    assert "diagram_d2_abc.pdf" in out
+    assert "- note" in out
+
+
+def test_preprocess_body_ordinary_slide_untouched():
+    ordinary = "# Topic\n\n- bullet one\n- bullet two"
+    out = engine.preprocess_body(ordinary)
+    assert ".columns" not in out
+    assert "- bullet one" in out
+
+
+def test_preprocess_body_pandoc_div_slide_untouched():
+    # An ordinary slide with a Pandoc fenced div must not be lowered (R6).
+    deck = "# T\n\nprose\n\n::: notes\nnote\n:::"
+    out = engine.preprocess_body(deck)
+    assert ".columns .onlytextwidth" not in out
+    assert "::: notes" in out
