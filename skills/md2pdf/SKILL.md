@@ -1,11 +1,11 @@
 ---
 name: md2pdf
-description: Create, edit, render, theme, and troubleshoot Markdown slide decks with md2pdf (Pandoc + Beamer). Use when working with Markdown-to-PDF presentations, branded Beamer decks, picture slides, Mermaid or D2 diagram slides, or md2pdf themes.
+description: Create, edit, render, theme, and troubleshoot Markdown slide decks with md2pdf (Pandoc + Beamer). Use when working with Markdown-to-PDF presentations, branded Beamer decks, picture slides, Mermaid or D2 diagram slides, two-column (picture + text) slides, or md2pdf themes.
 ---
 
 # md2pdf
 
-Use this skill to produce PDF slide decks from Markdown with the repository's `md2pdf` CLI. Follow the existing deck's front matter and theme unless the task asks to change them. Consult [README.md](../../README.md) for the complete supported format and constraints; use the maintained reference decks in [examples/default-demo.md](../../examples/default-demo.md), [examples/picture-demo.md](../../examples/picture-demo.md), and [examples/diagram-demo.md](../../examples/diagram-demo.md) rather than creating a parallel example.
+Use this skill to produce PDF slide decks from Markdown with the repository's `md2pdf` CLI. Follow the existing deck's front matter and theme unless the task asks to change them. Consult [README.md](../../README.md) for the complete supported format and constraints; use the maintained reference decks in [examples/default-demo.md](../../examples/default-demo.md), [examples/picture-demo.md](../../examples/picture-demo.md), [examples/diagram-demo.md](../../examples/diagram-demo.md), and [examples/two-column-demo.md](../../examples/two-column-demo.md) rather than creating a parallel example.
 
 ## Prerequisites
 
@@ -104,6 +104,27 @@ Broker -> Consumer: deliver
 - `mermaid` renders to PNG with `mmdr`.
 - Extra info-string parameters, such as `d2 layout=elk`, do **not** qualify as a diagram slide and emit a non-fatal near-miss warning.
 - Diagram render failures (missing CLI, timeout, or non-zero exit) fail the build; correct the source or install the appropriate renderer and retry.
+
+## Two-column slides (picture + text, side by side)
+
+Place a picture or diagram beside text on one slide with the `:::` convention. The slide is a single `# Heading` whose body **opens** with a `:::` line and holds **exactly two regions** framed by three `:::` lines (opening, separator, closing):
+
+```markdown
+# Picture and text, side by side
+
+:::
+![Fit-to-column image; alt text becomes a caption.](assets/architecture.png)
+:::
+- The left column is a single image, scaled to fit its half.
+- The right column is ordinary Markdown: bullets, prose, inline code.
+:::
+```
+
+- **Strictly two columns, 50/50**, top-aligned, constrained to the text width (respects theme margins and logos). There is no width syntax and no N-column support.
+- A region whose sole content is one image **or** one lone `d2`/`mermaid` fence is scaled to fit its column; any other region (bullets, prose, tables, mixed content) renders as normal Markdown. An image region's alt text becomes a small caption; a diagram region carries no caption, so put any figure label in the companion text column.
+- **Opt-in and backwards compatible**: only triggers when a slide's body opens with a `:::` line. Ordinary slides — including those using Pandoc fenced divs such as `::: notes` or `::: {.callout}` — are untouched.
+- **Fail-loud**: a slide that opts in but is malformed fails the build with an actionable, slide-identifying message. Failing cases include not exactly three `:::` delimiters, an empty region, non-blank content after the closing `:::`, an unterminated code fence inside a column, or a diagram region that fails to render.
+- A horizontal rule `---` is always a slide break and cannot appear inside a column; nested Pandoc fenced divs are not supported inside a two-column body.
 
 ## Themes
 

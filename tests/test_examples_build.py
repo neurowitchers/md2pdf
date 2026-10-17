@@ -53,3 +53,19 @@ def test_build_diagram_example_deck_produces_pdf(tmp_path):
     result = engine.build(src, out_pdf, theme_name="default")
     assert result.exists()
     assert out_pdf.stat().st_size > 0
+
+
+
+@pytest.mark.skipif(
+    not (_pandoc_xelatex() and bool(shutil.which("d2"))),
+    reason="pandoc/xelatex/d2 not all available",
+)
+def test_build_two_column_example_deck_produces_pdf(tmp_path):
+    # The two-column demo exercises a picture column and a d2-diagram column
+    # (no mermaid, so mmdr is not required).
+    src = EXAMPLES / "two-column-demo.md"
+    assert src.is_file(), f"missing example deck: {src}"
+    out_pdf = tmp_path / "two-column-demo.pdf"
+    result = engine.build(src, out_pdf, theme_name="default")
+    assert result.exists()
+    assert out_pdf.stat().st_size > 0

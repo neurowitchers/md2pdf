@@ -35,11 +35,62 @@ from .diagrams import render_diagram
 from .latex import latex_escape, latex_path
 from .slides import (
     _chunk_has_diagram_fence,
+    classify_region,
     match_diagram_slide,
     match_picture_slide,
+    match_two_column_slide,
     split_slides,
 )
 from .theme import Theme, load_theme
+
+
+def _fit_image_tex(
+    width_expr: str,
+    height_expr: str,
+    alt: str,
+    path: str,
+    *,
+    vcenter: bool,
+) -> str:
+    r"""Raw-LaTeX fit-to-box image block, shared by whole-slide and column fits.
+
+    ``vcenter=True`` wraps the image in ``\vfill … \vfill`` and a ``center``
+    environment to centre it vertically in the available space (whole-slide
+    picture/diagram frames). ``vcenter=False`` emits a *top-aligned* block using
+    the ``\centering`` **declaration** (not the ``center`` environment, whose
+    ``trivlist`` ``\topsep`` padding would push a column image below its
+    companion text — critique task-level E1); it carries no ``\vfill``.
+
+    If ``alt`` is non-empty it renders as a small centred caption beneath the
+    image, in the theme-defined ``captioncolor``.
+    """
+    img = latex_path(Path(path)) if path else path
+    caption = ""
+    if alt.strip():
+        caption = (
+            r"\vskip0.4em{\small\color{captioncolor}" + latex_escape(alt) + r"\par}"
+            + "\n"
+        )
+    graphic = (
+        r"\includegraphics[width=" + width_expr + r",height=" + height_expr
+        + r",keepaspectratio]{" + img + r"}\par" + "\n"
+    )
+    if vcenter:
+        return (
+            r"\vfill" + "\n"
+            r"\begin{center}" + "\n"
+            + graphic
+            + caption
+            + r"\end{center}" + "\n"
+            r"\vfill" + "\n"
+        )
+    # Top-aligned column variant: \centering declaration, no \vfill, no center env.
+    return (
+        r"{\centering" + "\n"
+        + graphic
+        + caption
+        + r"}" + "\n"
+    )
 
 
 def picture_body_tex(alt: str, path: str) -> str:
@@ -56,24 +107,50 @@ def picture_body_tex(alt: str, path: str) -> str:
     run directory (the input ``.md`` folder) or the diagram dir on
     ``--resource-path``/``\\graphicspath``; absolute paths pass through.
     """
-    img = latex_path(Path(path)) if path else path
-    caption = ""
-    if alt.strip():
-        caption = (
-            r"\vskip0.4em{\small\color{captioncolor}" + latex_escape(alt) + r"\par}"
-            + "\n"
-        )
-    # \vfill above and below centres vertically; \centering centres
-    # horizontally. keepaspectratio ensures the limiting dimension governs fit.
-    return (
-        r"\vfill" + "\n"
-        r"\begin{center}" + "\n"
-        r"\includegraphics[width=\textwidth,height=0.78\textheight,"
-        r"keepaspectratio]{" + img + r"}\par" + "\n"
-        + caption +
-        r"\end{center}" + "\n"
-        r"\vfill" + "\n"
+    return _fit_image_tex(
+        r"\textwidth", r"0.78\textheight", alt, path, vcenter=True
     )
+
+
+def column_body_tex(alt: str, path: str) -> str:
+    r"""Raw-LaTeX fit-to-column image block for a two-column slide region.
+
+    Scoped to ``\columnwidth`` with a slightly reduced height bound
+    (``0.72\textheight``) so a multi-line caption cannot overflow a 16:9 frame
+    (critique E6). Top-aligned (no ``\vfill``) so the image lines up with the
+    companion column's text (critique P2 / task-level E1).
+    """
+    return _fit_image_tex(
+        r"\columnwidth", r"0.72\textheight", alt, path, vcenter=False
+    )
+
+
+def _column_region_tex(
+    region: str, diagram_dir: Path | None, title: str
+) -> str:
+    r"""Lower one two-column region to the markup placed inside its ``.column``.
+
+    A region whose sole non-blank content is one image or one lone
+    ``mermaid``/``d2`` fence is rewritten to a ``\columnwidth``-fit raw-LaTeX
+    block (``column_body_tex``); a diagram region is first rendered via
+    ``render_diagram`` and emitted by relative filename. Any other region is
+    returned verbatim so pandoc renders its Markdown inside the column.
+    """
+    kind, *rest = classify_region(region)
+    if kind == "image":
+        alt, path = rest
+        return "```{=latex}\n" + column_body_tex(alt, path) + "```"
+    if kind == "diagram":
+        lang, source = rest
+        if diagram_dir is None:
+            raise SystemExit(
+                "ERROR: diagram region encountered but no diagram output "
+                "directory was provided (internal error)."
+            )
+        img_path = render_diagram(lang, source, diagram_dir, title)
+        return "```{=latex}\n" + column_body_tex("", img_path.name) + "```"
+    # markdown: pandoc renders it inside the column.
+    return region
 
 
 def preprocess_body(body: str, diagram_dir: Path | None = None) -> str:
@@ -93,6 +170,26 @@ def preprocess_body(body: str, diagram_dir: Path | None = None) -> str:
     """
     out_parts: list[str] = []
     for chunk in split_slides(body):
+        two_col = match_two_column_slide(chunk)
+        if two_col is not None:
+            left_block = _column_region_tex(
+                two_col["left"], diagram_dir, two_col["title"]
+            )
+            right_block = _column_region_tex(
+                two_col["right"], diagram_dir, two_col["title"]
+            )
+            out_parts.append(
+                "# " + two_col["title"] + "\n\n"
+                ":::::: {.columns .onlytextwidth align=top}\n"
+                ':::: {.column width="50%"}\n'
+                + left_block + "\n"
+                "::::\n"
+                ':::: {.column width="50%"}\n'
+                + right_block + "\n"
+                "::::\n"
+                "::::::"
+            )
+            continue
         pic = match_picture_slide(chunk)
         if pic is not None:
             body_tex = picture_body_tex(pic["alt"], pic["path"])

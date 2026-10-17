@@ -13,9 +13,22 @@ bundled theme name fails loudly listing the known bundled themes.
 from __future__ import annotations
 
 import argparse
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 
-from . import __version__
+
+def _resolve_version() -> str:
+    """Return the installed package version from metadata.
+
+    Reads the version from the installed distribution metadata (kept in sync
+    with ``pyproject.toml``) rather than a hardcoded module attribute. Falls
+    back to ``"unknown"`` if the package is not installed (e.g. run from a
+    source tree without an editable install).
+    """
+    try:
+        return _pkg_version("md2pdf")
+    except PackageNotFoundError:  # pragma: no cover - only without an install
+        return "unknown"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=f"%(prog)s {_resolve_version()}",
     )
     return parser
 

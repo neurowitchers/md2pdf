@@ -149,6 +149,68 @@ Rendering details:
   **not** treated as strict diagram slides; a near-miss fence emits a non-fatal
   warning.
 
+### Two-column slides (picture + text, side by side)
+
+A slide can place two things side by side — e.g. a picture or schema on the
+left and bullets on the right — using a lightweight `:::` convention. The slide
+is a single `# Heading` whose body **opens** with a `:::` delimiter and holds
+**exactly two regions** framed by three `:::` lines (opening, separator,
+closing):
+
+```markdown
+# Picture and text, side by side
+
+:::
+![A fit-to-column image; the alt text becomes a caption.](assets/arch.png)
+:::
+- The left column is a single image, scaled to fit its half.
+- The right column is ordinary Markdown: bullets, prose, `inline code`.
+:::
+```
+
+Rules and behaviour:
+
+- **Strictly two columns, 50/50.** Each region becomes one half-width Beamer
+  column; there is no width syntax and no N-column support. Columns are
+  constrained to the text width (they respect the theme margins and logos) and
+  are top-aligned.
+- **Both sides fit.** A region whose sole content is one image **or** one lone
+  `d2`/`mermaid` fence is scaled to fit its column (width bounded to the column,
+  height bounded, aspect ratio preserved). An image region's alt text renders as
+  a small caption. Any other region (bullets, prose, tables, mixed content)
+  renders as normal Markdown flowing within its half.
+- **Diagrams in a column** render through the same cache as whole-slide diagram
+  slides. A diagram region carries **no** caption (there is no alt-text syntax
+  for a fence); put any figure label in the companion text column:
+
+  ````markdown
+  # Diagram and notes, side by side
+
+  :::
+  ```d2
+  ingest -> engine -> cache -> serve
+  ```
+  :::
+  - The left column is a `d2` diagram, rendered and fit to the column.
+  - Use this column for the figure label or explanation.
+  :::
+  ````
+
+- **Opt-in and backwards compatible.** The feature triggers **only** when a
+  slide's body opens (after the `# Heading`) with a `:::` line. Ordinary slides
+  — including those using Pandoc fenced divs such as `::: notes` or
+  `::: {.callout}` — are untouched.
+- **Fail-loud.** A slide that opts in but is malformed fails the build with an
+  actionable, slide-identifying message rather than producing a broken layout.
+  Failing cases: not exactly three `:::` delimiter lines; an empty region;
+  non-blank content after the closing `:::`; an unterminated code fence inside a
+  column; a diagram region that fails to render.
+- **Reserved markers.** A horizontal rule `---` is always a *slide* break, so it
+  cannot be used inside a column. Nested Pandoc fenced divs (e.g. `::: notes`)
+  are not supported inside a two-column body.
+
+See `examples/two-column-demo.md` for a working deck.
+
 ## Writing a theme
 
 A theme is a directory with this shape (the bundled themes under
