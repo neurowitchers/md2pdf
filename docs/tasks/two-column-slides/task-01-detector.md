@@ -45,21 +45,38 @@ Add a strict, fence-aware `match_two_column_slide(chunk)` and a
       the scanner is not inside a code fence.
     - `match_two_column_slide(chunk) -> dict | None`:
       - Parse the single `# Title` via `_H1_RE` (first heading). A second
-        heading → fail-loud.
+        heading on an otherwise-two-column slide → fail-loud.
       - Walk lines with fence-aware scanning, collecting `:::` delimiter
         positions (outside code fences).
-      - If **no** delimiter is found → return `None` (not a two-column slide;
-        ordinary/picture/diagram paths handle it — R6).
-      - If delimiters exist: enforce the grammar and **fail loud** (`SystemExit`)
-        otherwise:
-        - non-blank content between the title and the first delimiter → error
-          `"content preceding the opening ':::' delimiter is not supported"`
-          (critique P1);
-        - not exactly three delimiter lines → error naming the count;
+      - **Opt-in trigger (critique task-level P1 — do not break R6).** Determine
+        two-column *intent* conservatively so ordinary slides that merely
+        contain a Pandoc fenced div (e.g. `::: {.note}`/`::: notes` closing with
+        a bare `:::`) are **not** hijacked:
+        - If **no** `:::` delimiter exists → return `None`.
+        - If the **first non-blank line after the title is a `:::` delimiter**
+          → the slide has opted in; enforce the full grammar below (fail-loud on
+          violation).
+        - Else (there are `:::` lines but the body does **not** open with one):
+          the slide has **not** opted in → return `None` and let ordinary /
+          picture / diagram processing handle it. This is the key fix: an
+          isolated bare `:::` that closes a Pandoc callout/notes div on a normal
+          slide must *not* trigger the pre-delimiter error. Pre-delimiter
+          content is only an error on a slide that *did* open with `:::` (which
+          cannot have pre-delimiter content by definition) — so the practical
+          rule is simply: opt in **iff** the first non-blank post-title line is
+          a delimiter; otherwise pass through untouched.
+      - **Grammar enforcement (only once opted in), fail-loud (`SystemExit`):**
+        - **Unterminated inner code fence takes precedence (critique task-level
+          E2):** if the fence scanner reaches end-of-chunk still inside an open
+          code fence, raise the *unterminated-fence* error (naming the fence's
+          language/opening line) **before** any delimiter-count check, so the
+          author is not misled by a wrong "expected 3 delimiters" message.
+        - not exactly three delimiter lines (open / separator / close) → error
+          naming the actual count;
         - either region (open→sep, sep→close) empty of non-blank lines → error;
         - non-blank content after the closing delimiter → error (trailing blank
           lines are ignored — critique E4);
-        - an unterminated inner code fence → error.
+        - a second `# Title` → error.
       - Error messages identify the slide: use the parsed title, else a
         near-`:::` snippet / first non-blank line (critique E3). Prefix `ERROR:`
         and mirror the existing diagram/field error style.

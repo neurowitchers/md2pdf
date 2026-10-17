@@ -42,13 +42,15 @@ frame title; the two columns are the frame body; vertical alignment is fixed
 `align=top` and the columns are constrained to `\textwidth` via the
 `.onlytextwidth` class (critique E1).
 
-**R5 — Fail-loud.** Malformed two-column markup raises `SystemExit` with an
-actionable, slide-identifying message. Failing cases: not exactly three `:::`
-delimiter lines; an empty region; **non-blank content between `# Title` and the
-opening `:::` delimiter** (critique P1); non-blank content after the closing
-delimiter; a region's lone diagram fence failing to render; an unterminated
-inner fence. No lenient warn-and-pass-through for a slide that opts into the
-`:::` shape.
+**R5 — Fail-loud.** Malformed two-column markup **on an opted-in slide** (one
+that opens, after its `# Title`, with a `:::` delimiter) raises `SystemExit`
+with an actionable, slide-identifying message. Failing cases: not exactly three
+`:::` delimiter lines; an empty region; non-blank content after the closing
+delimiter; an unterminated inner code fence (diagnosed *before* the
+delimiter-count check — critique task-level E2); a region's lone diagram fence
+failing to render. No lenient warn-and-pass-through for a slide that opts into
+the `:::` shape. A slide that does **not** open with a `:::` delimiter never
+fails here — it is passed through untouched (R6).
 
 **R6 — Backwards compatibility.** Ordinary, strict-picture, and strict-diagram
 slides render **identically** to before. The feature is strictly opt-in: a slide
@@ -135,22 +137,30 @@ Grammar (Q1):
   ```` ```python ````/```` ```json ````/untagged block is content, not a
   delimiter. Do **not** reuse `match_diagram_slide`'s scanner, which only tracks
   diagram languages.
-- Exactly one `# Title` (via `_H1_RE`).
-- After the title, the first non-blank line must be a delimiter. *(Critique
-  P1):* **any non-blank content between `# Title` and the opening `:::`
-  delimiter is fail-loud**, not a silent fall-through — a slide that contains
-  `:::` delimiter lines (outside code fences) but has non-blank content before
-  the first delimiter raises `SystemExit`
-  (`"ERROR: slide '<title>': content preceding the opening ':::' delimiter is "
-  "not supported in two-column slides"`). This honours R5 (no silent
-  passthrough of malformed `:::` markup to pandoc).
-- The body holds **exactly three** delimiter lines: open, separator, close.
+- Exactly one `# Title` (via `_H1_RE`) on an opted-in slide.
+- **Opt-in trigger (R6-safe, critique task-level P1).** The slide opts into
+  two-column layout **iff the first non-blank line after `# Title` is a `:::`
+  delimiter**. If no `:::` delimiter exists, or `:::` lines exist but the body
+  does **not** open with one, `match_two_column_slide` returns `None` and the
+  slide is handled by the ordinary / picture / diagram paths untouched. This
+  guarantees that an ordinary slide containing a Pandoc fenced div (e.g.
+  `::: {.note}` / `::: notes`, whose closing bare `:::` matches
+  `_COLON_FENCE_RE`) is **not** hijacked or failed — honouring R6. Because the
+  trigger requires the body to *open* with a delimiter, "pre-delimiter content"
+  cannot occur on an opted-in slide; the earlier over-broad "fail on any
+  pre-delimiter content" rule is removed in favour of this conservative trigger.
+- Once opted in, the body holds **exactly three** delimiter lines: open,
+  separator, close.
 - `left` = verbatim lines between open and separator; `right` = verbatim lines
   between separator and close. Each must have ≥1 non-blank line (else fail-loud:
   empty region).
-- A second `# Title`, **non-blank** content after the closing delimiter
-  (trailing blank lines/whitespace are ignored), or an unterminated inner fence
-  → fail-loud. When the offending slide has no parseable `# Title`, the
+- **Fail-loud ordering (critique task-level E2).** If the fence scanner reaches
+  end-of-chunk still inside an open code fence, raise the *unterminated-fence*
+  error (naming the fence) **before** the delimiter-count check, so the message
+  is not a misleading "expected 3 delimiters". Then: a second `# Title`,
+  **non-blank** content after the closing delimiter (trailing blank
+  lines/whitespace ignored), or a delimiter count ≠ 3 → fail-loud. When the
+  offending slide has no parseable `# Title`, the
   fail-loud message falls back to a near-`:::` snippet or the slide index so the
   error still identifies the slide (critique E3-adjacent).
 
@@ -307,6 +317,33 @@ for human review):
 
 The height bound was also tightened to `0.72\textheight` (critique E6, folded in
 with P2 since it shares the same emission site).
+
+### Applied critique — Must-Address (task-level `--task-level --auto`, `two-column-slides-tasklevel-critique.md`)
+
+The task-level handoff critique (spec + task set) produced three 🎯
+Must-Address findings, all applied (to task files by default; the spec was
+amended where the finding changes acceptance criteria / architecture):
+
+- **P1 (task-level)** — The spec-level P1 "fail on any pre-delimiter content"
+  rule was **over-broad**: an ordinary slide containing a Pandoc fenced div
+  (`::: {.note}` / `::: notes`) closes with a bare `:::` and would have been
+  falsely failed, breaking R6. Corrected to a conservative **opt-in trigger**:
+  a slide is two-column *iff* its first non-blank post-title line is a `:::`
+  delimiter; otherwise it passes through untouched. *(Detection grammar, R5,
+  R6; task-01.)*
+- **E1 (task-level)** — The column image uses the `\centering` **declaration**,
+  not the `\begin{center}` environment (which is a `trivlist` adding
+  `\topsep`/`\parskip` padding that would push the image below the companion
+  bullets in a `columns[T]` layout). *(task-02.)*
+- **E2 (task-level)** — An unterminated inner code fence is diagnosed **before**
+  the delimiter-count check, so the error names the real problem instead of a
+  misleading "expected 3 delimiters". *(Detection grammar, R5; task-01.)*
+
+💡 Recommendations (P2 message-content assertions, P3 diagram-caption docs, E3
+`uv run python`, E5 monkeypatched-`render_diagram` test, E6 `diagram_dir` in
+regression, E7 layout-permutation/heading tests, O1 intermediate regression
+gates) and 🤔 Question (E4 `classify_region` typing) are preserved in the
+task-level critique report for human review.
 
 ### Out of scope (recorded)
 

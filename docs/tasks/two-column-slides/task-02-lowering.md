@@ -37,9 +37,13 @@ through (R2, R3, R4, R7).
       `_fit_image_tex(width_expr, height_expr, alt, path, *, vcenter)`:
       - `vcenter=True` wraps in `\vfill … \vfill` (whole-slide behaviour,
         unchanged output for `picture_body_tex`);
-      - `vcenter=False` emits a top-aligned `\begin{center} …
-        \includegraphics[...]\par <caption> \end{center}` with **no** `\vfill`
-        (critique P2).
+      - `vcenter=False` emits a top-aligned
+        `{\centering\includegraphics[...]\par <caption>}` block (critique
+        task-level E1: use the `\centering` **declaration**, **not** the
+        `\begin{center}…\end{center}` environment — the `center` environment is
+        a `trivlist` that injects `\topsep`/`\parskip` vertical padding at the
+        top of the column, pushing the image ~6–10pt below the companion
+        bullets in a `columns[T]` layout). No `\vfill` (critique P2).
     - Keep `picture_body_tex(alt, path)` behaviour **byte-identical**: delegate
       to `_fit_image_tex(r"\textwidth", r"0.78\textheight", alt, path,
       vcenter=True)`.
