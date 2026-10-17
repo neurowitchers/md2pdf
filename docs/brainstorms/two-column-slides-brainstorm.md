@@ -1,7 +1,7 @@
 ---
 generated-by: "Brainstorm"
 generated-at: 2026-10-17T22:40:32+03:00
-status: drafting
+status: recommended
 ---
 
 # Technical Brainstorm: Two-Column / Picture-and-Text Slides
@@ -205,37 +205,189 @@ status: drafting
   (non-fatal) on cosmetic issues (missing width, near-miss markers), mirroring
   the diagram near-miss warning.
 
+## Resolved User Decisions (Phase 2 answers)
+
+The user's filled `USER_INPUT` answers are **authoritative** and materially
+narrow the design:
+
+| Q | Decision | Consequence |
+|---|----------|-------------|
+| Q1 | **(b) a `:::` shorthand** — a bespoke md2pdf convention, *not* raw pandoc divs | md2pdf owns the authoring marker and lowers it to Beamer columns; authors never type pandoc div attributes. |
+| Q2 | **Neither (1) nor (2): always 50/50, both sides scale to fit** | No per-column width syntax. **Both** columns are fit-to-column — images/diagrams scale to the half-frame box; text scales within its half. |
+| Q3 | **Strictly two columns, 50/50** | No N-column support, no width attributes. Exactly one left / one right, each `0.5\textwidth`. |
+| Q4 | **Keep `# Title` + columns-in-body, fixed `align=top`** | Frame title band preserved; the two-column block is the frame body; vertical `align=top`. No author-exposed alignment. |
+| Q5 | **Fail-loud** | Malformed two-column markup (wrong number of regions, empty region, unrenderable diagram) raises `SystemExit` with an actionable message — consistent with required-field / fontsize failures — rather than a lenient warn-and-pass-through. |
+
+These answers **retire the Phase-1 baseline preview**: Approach A (expose native
+pandoc divs) is rejected by Q1(b); N-column generality (baseline A3) is rejected
+by Q3; the lenient-warning posture (baseline A5) is rejected by Q5. The design
+space collapses to *how* to implement the `:::` two-column shorthand.
+
 ## Architectural Approaches Evaluated
 
-> *(Populated in Phase 3 after the questions above are answered. Candidate
-> directions already visible from the baseline — recorded here as a preview,
-> not a decision:)*
->
-> - **Approach A — "Pass-through native divs + fit-to-column rewriter":**
->   Document pandoc `::: columns`. In `preprocess_body`, detect columns whose
->   sole content is an image/diagram and rewrite just that content to a
->   `\columnwidth`-fit raw-LaTeX block (diagrams rendered via `render_diagram`).
->   Everything else is pandoc's job. Smallest surface; no new dialect parser.
-> - **Approach B — "md2pdf column convention":** A lighter authoring marker
->   (e.g. a dedicated separator or `## Left/## Right`) parsed in `slides.py` and
->   lowered to pandoc column divs. Prettier Markdown, but a new parser + new
->   dialect rule to document and test.
-> - **Approach C — "Raw-LaTeX columns template":** Emit `\begin{columns}` raw
->   LaTeX ourselves. Rejected early: pandoc won't process markdown inside raw
->   `columns`, forcing authors into LaTeX — contradicts the dialect ethos.
+All three approaches below honour the fixed decisions (one `:::`-delimited
+two-column region per slide, strictly 50/50, both sides fit, `# Title` kept,
+`align=top`, fail-loud). They differ in **where the `:::` marker is parsed and
+what we emit to pandoc**.
+
+### Approach A — Lower `:::` to native pandoc column divs (markdown preserved)
+
+- **Concept:** Treat `:::` as a slide-local separator. In `slides.py`, add
+  `match_two_column_slide(chunk)` that recognises a slide of the exact shape
+  "`# Title` + a `:::`-fenced two-column region" and returns the two region
+  bodies. In `preprocess_body`, lower it to pandoc's **native** column divs:
+
+  ````markdown
+  # Title
+
+  ::: columns
+  :::: {.column width="50%" align=top}
+  <left body, markdown preserved verbatim>
+  ::::
+  :::: {.column width="50%" align=top}
+  <right body, markdown preserved verbatim>
+  ::::
+  :::
+  ````
+
+  Pandoc then renders the markdown inside each column (bullets, prose, tables)
+  for free. The md2pdf-specific "both sides scale to fit" is layered **inside**
+  each column: if a region's sole content is an image or a `mermaid`/`d2`
+  fence, that content is rewritten to a `\columnwidth`-fit raw-LaTeX block
+  (reusing a column-scoped variant of `picture_body_tex`, diagrams via
+  `render_diagram`). A text region is wrapped so its content scales to the box.
+- **Component Changes:** `slides.py` (+`match_two_column_slide`, a `:::` region
+  parser, `_COLUMN_RE`); `engine.py` (`preprocess_body` branch + a
+  `column_body_tex(...)` helper scoped to `\columnwidth`; route `diagram_dir`
+  into the column path); README dialect section; a new example deck; tests.
+- **Dependencies Introduced:** None (pandoc's column divs are built in).
+
+### Approach B — Emit raw-LaTeX `columns`/`column` environment directly
+
+- **Concept:** Same `:::` detection in `slides.py`, but `preprocess_body` emits
+  a full raw-LaTeX `\begin{columns}[t] … \column{0.5\textwidth} … \end{columns}`
+  block, placing each region's content inside. Because pandoc leaves raw-LaTeX
+  bodies **unprocessed**, each region's markdown would have to be converted to
+  LaTeX by us (or forbidden), so in practice regions would be limited to images
+  / diagrams / pre-escaped text.
+- **Component Changes:** `slides.py` (detection); `engine.py` (raw columns
+  emitter, per-region LaTeX generation); README; example; tests.
+- **Dependencies Introduced:** None, but effectively re-implements markdown→TeX
+  for column bodies.
+
+### Approach C — Per-region sub-render via pandoc, then splice
+
+- **Concept:** `:::` detection in `slides.py`; for each region, run a **separate
+  pandoc invocation** to convert that region's markdown to a LaTeX fragment,
+  then splice both fragments into a raw `columns` environment.
+- **Component Changes:** `engine.py` (two extra pandoc calls per two-column
+  slide, fragment splicing); `slides.py` (detection); README; example; tests.
+- **Dependencies Introduced:** None new, but adds N extra pandoc subprocess
+  calls per slide and a fragment-assembly surface.
 
 ## Structured Comparison & Methodology
 
-> *(SWOT matrix populated in Phase 3.)*
+### SWOT Matrix
+
+| Approach | Strengths | Weaknesses | Opportunities | Threats/Risks |
+|----------|-----------|------------|---------------|---------------|
+| **A — lower `:::` to native pandoc columns** | Pandoc renders in-column markdown for free; smallest new code; reuses `picture_body_tex`/`render_diagram` for the fit case; single pandoc pass; matches existing "rewrite chunk → emit markdown+raw-latex" pattern exactly | Must get the lowering string right (balanced `::::`); "both sides fit" needs a column-scoped tex helper | Clean path to future N-column or width override if ever wanted (just unlock what pandoc already does); diagrams-in-columns reuse the cache | Pandoc div-nesting depth / fence-length rules (outer `:::` vs inner `::::`) must be correct or pandoc mis-nests |
+| **B — raw-LaTeX columns** | Full control over the emitted TeX; no reliance on pandoc div behaviour | **Loses markdown-in-column** (pandoc won't process raw bodies) → either forbid bullets/prose in columns (contradicts "pic + text") or re-implement md→TeX; most code; brittle escaping | Minimal | High: re-implementing markdown rendering is a large, bug-prone surface; directly fights the dialect ethos |
+| **C — per-region sub-render** | Keeps markdown in columns; full control of splicing | Multiple pandoc processes per slide (perf); fragment splicing fragile (preamble/escaping drift between passes); diverges from the single-pass architecture | Could isolate per-region failures | Medium–high: process-count blowup on diagram-heavy decks; two pandoc dialects/versions to keep consistent; new failure modes |
+
+**Methodology note.** The decisive axis is *who renders the in-column markdown*.
+Q2/Q4 require real bullets/prose beside a picture, so any approach that forfeits
+pandoc's in-column markdown rendering (B) or multiplies pandoc passes (C) pays a
+large, recurring cost. Approach A keeps the engine's existing one-pass,
+"rewrite-chunk-to-markdown+raw-latex" shape and simply *delegates* the column
+box to the one pandoc feature built for it.
 
 ## Recommendation
 
-> *(Populated in Phase 4.)*
+**Adopt Approach A — parse a bespoke `:::` two-column shorthand in `slides.py`
+and lower it to pandoc's native `columns`/`column` divs, with both regions
+fit-to-column (50/50, `align=top`), failing loud on malformed markup.**
+
+Rationale:
+
+- **Honours every fixed decision directly.** The `:::` marker is md2pdf's own
+  (Q1b); we emit exactly two `width="50%"` columns (Q2/Q3); `align=top` is set
+  on the block (Q4); detection and lowering validate structure and raise
+  `SystemExit` on any deviation (Q5).
+- **Minimal, idiomatic code.** It mirrors the existing picture/diagram pipeline:
+  `slides.py` gains a strict matcher (`match_two_column_slide`) exactly like
+  `match_picture_slide`/`match_diagram_slide`; `engine.py` gains a
+  `preprocess_body` branch that emits `# Title` + the lowered columns, reusing a
+  `\columnwidth`-scoped variant of `picture_body_tex` and the existing
+  `render_diagram` cache for the fit-to-column image/diagram case.
+- **Pandoc does the hard part.** In-column bullets/prose/tables render natively
+  (confirmed against the pandoc User's Guide §10.6), so "picture + text" works
+  without md2pdf re-implementing markdown→TeX (the fatal cost of B and the
+  perf/splice cost of C).
+- **Single pass, no new dependencies.** Keeps the one pandoc→beamer→xelatex
+  invocation and the existing diagnostics/`\graphicspath` machinery intact.
+
+Concretely, the recommended authoring convention (to be finalised in the spec):
+
+````markdown
+# Architecture at a glance
+
+:::
+![Pipeline overview](assets/pipeline.png)
+:::
+- Ingest normalises inputs
+- The core engine fans out
+- Results are cached and served
+:::
+````
+
+A single slide, a `# Title`, and a `:::`-delimited body with **exactly two
+regions** separated by a `:::` line (opening `:::`, left region, `:::`
+separator, right region, closing `:::`). Left is an image → fit-to-column; right
+is bullets → pandoc-rendered. Both halves are `0.5\textwidth`, top-aligned. The
+exact fence/separator grammar (how many `:::` lines, whether a diagram fence may
+be a region) is the first thing the spec/questionnaire must pin down, since the
+inner regions themselves may contain fenced code (````` ``` `````) — the parser
+must not confuse a diagram fence with a region separator.
 
 ### Key Risks & Mitigations
 
-> *(Populated in Phase 4.)*
+| Risk | Mitigation |
+|------|------------|
+| `:::` grammar ambiguity vs. inner diagram fences / nested `:::` | Define a strict grammar in the spec: a two-column slide is `# Title` + one top-level `:::` block containing exactly two regions split by a single `:::` line; inner ```` ``` ```` fences are captured verbatim and never treated as separators (reuse the fence-aware scanning already in `match_diagram_slide`). |
+| Lowering to pandoc divs mis-nests (outer vs inner colon count) | Emit outer `:::`/inner `::::` with distinct lengths exactly per pandoc §10.6; add a pandoc-only TeX-generation test (no XeLaTeX needed) asserting the emitted `\begin{columns}`/`\column` structure. |
+| "Both sides scale to fit" is under-specified for text | Spec decides the text-fit mechanism (e.g. wrap in a sized box / let Beamer column flow). Default: text flows naturally in its `0.5\textwidth` column (Beamer handles overflow); only images/diagrams get explicit `\columnwidth` fit. Flag any residual overflow as a documented limitation. |
+| Diagram fence inside a column must route `diagram_dir` | Thread `diagram_dir` into the column rewrite path exactly as the whole-slide diagram branch does; reuse `render_diagram` (content-addressed cache, fail-loud). |
+| Fail-loud regressions on existing decks | Detection is strict and opt-in (only triggers on the `:::` shape); ordinary, picture, and diagram slides are untouched. Regression-test the three existing example decks still build byte-for-identical TeX structure. |
+| Asset paths with spaces in column images | Reuse the existing `\graphicspath` + `--resource-path` handling and relative-filename emission; no new path logic. |
 
 ### Summary Table
 
-> *(Populated in Phase 4.)*
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Authoring marker | Bespoke `:::` two-column shorthand (Q1b) | md2pdf owns the convention; authors never see pandoc div attributes. |
+| Column count / split | Strictly two, 50/50 (Q2/Q3) | No width syntax; each region `0.5\textwidth`. |
+| Fit behaviour | Both sides fit; image/diagram → `\columnwidth` fit, text flows in half-width (Q2) | Reuses `picture_body_tex`/`render_diagram`; pandoc renders text. |
+| Title & alignment | Keep `# Title`; columns in body; `align=top` (Q4) | Preserves branded frame band; top-aligned reads best for pic+text. |
+| Failure posture | Fail-loud `SystemExit` on malformed markup (Q5) | Consistent with required-field/fontsize errors; actionable messages. |
+| Implementation | Approach A — parse `:::` in `slides.py`, lower to pandoc columns in `engine.py` | Smallest, idiomatic, single-pass; pandoc renders in-column markdown natively. |
+| Rejected | B (raw-LaTeX columns), C (per-region sub-render) | B forfeits in-column markdown; C multiplies pandoc passes and splice risk. |
+
+### Phased Execution Plan (next steps)
+
+1. **Grammar & dialect spec.** Pin the exact `:::` two-column grammar
+   (delimiter counts, region count = 2, whitespace rules, interaction with inner
+   diagram fences, what disqualifies → fail-loud message text).
+2. **`slides.py` detector.** `match_two_column_slide(chunk)` → `{title, left,
+   right}` or `None`; strict, fence-aware; a near-but-invalid `:::` slide raises
+   (fail-loud) rather than silently passing through.
+3. **`engine.py` lowering.** `preprocess_body` branch emitting `# Title` + native
+   pandoc `columns` (two `width="50%"`, `align=top`); a `column_body_tex`
+   helper for the fit-to-column image/diagram case; route `diagram_dir`.
+4. **Tests.** Pandoc-only TeX-generation tests for the emitted column structure
+   and the image/diagram fit; unit tests for the detector (valid + each
+   fail-loud case); a toolchain-guarded end-to-end `build()` test; regression
+   tests that the three existing example decks are unaffected.
+5. **Docs & example.** README "Two-column slides" dialect section; a
+   `two-column-demo.md` example (pic-left/text-right and a diagram-in-column).
+
