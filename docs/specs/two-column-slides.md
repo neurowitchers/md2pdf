@@ -2,8 +2,8 @@
 generated-by: "Plan Spec"
 source: docs/seed/two-column-slides.md
 generated-at: 2026-10-17T22:54:43+03:00
-status: draft
-critiqued-revision:
+status: critiqued
+critiqued-revision: PENDING-COMMIT
 ---
 
 # Full Spec: Two-Column (Picture + Text) Slides
@@ -31,19 +31,24 @@ columns, each `0.5\textwidth`. There is no width syntax and no N-column support.
 
 **R3 — Both sides fit.** A region whose sole non-blank content is one Markdown
 image **or** one lone `mermaid`/`d2` fence is scaled to fit its column
-(`width=\columnwidth`, bounded height, aspect preserved, centred). Any other
-region (bullets/prose/table/mixed) renders as normal Markdown flowing within its
-`0.5\textwidth` column. An image region's alt text renders as a small caption.
+(`width=\columnwidth`, bounded height `0.72\textheight`, aspect preserved,
+horizontally centred, **top-aligned** — no `\vfill`, per critique P2/E6). Any
+other region (bullets/prose/table/mixed) renders as normal Markdown flowing
+within its `0.5\textwidth` column. An image region's alt text renders as a small
+caption.
 
 **R4 — Title & alignment.** The leading `# Title` remains the branded Beamer
 frame title; the two columns are the frame body; vertical alignment is fixed
-`align=top`.
+`align=top` and the columns are constrained to `\textwidth` via the
+`.onlytextwidth` class (critique E1).
 
 **R5 — Fail-loud.** Malformed two-column markup raises `SystemExit` with an
 actionable, slide-identifying message. Failing cases: not exactly three `:::`
-delimiter lines; an empty region; a region's lone diagram fence failing to
-render; an unterminated inner fence. No lenient warn-and-pass-through for a slide
-that opts into the `:::` shape.
+delimiter lines; an empty region; **non-blank content between `# Title` and the
+opening `:::` delimiter** (critique P1); non-blank content after the closing
+delimiter; a region's lone diagram fence failing to render; an unterminated
+inner fence. No lenient warn-and-pass-through for a slide that opts into the
+`:::` shape.
 
 **R6 — Backwards compatibility.** Ordinary, strict-picture, and strict-diagram
 slides render **identically** to before. The feature is strictly opt-in: a slide
@@ -121,17 +126,33 @@ not open with a `:::` delimiter), and raising `SystemExit` when the chunk opens
 with `:::` but violates the grammar (fail-loud, R5).
 
 Grammar (Q1):
-- A **delimiter** is a line matching `^:{3,}\s*$` (`_COLON_FENCE_RE`), scanned
-  **outside** any inner ```` ``` ````/`~~~` fence (reuse `match_diagram_slide`'s
-  fence tracking so a `:::` inside a code block is content, not a delimiter).
+- A **delimiter** is a line matching `^\s{0,3}:{3,}\s*$` (`_COLON_FENCE_RE`),
+  scanned **outside** any inner code fence. *(Critique E2):* delimiter scanning
+  uses a **dedicated general code-fence scanner** (e.g. `_scan_code_fences` in
+  `slides.py`) that tracks **any** opening ```` ``` ````/`~~~` fence of 3+
+  characters **regardless of language tag** (not just `mermaid`/`d2`) and
+  ignores every line until the matching close — so a `:::` inside a
+  ```` ```python ````/```` ```json ````/untagged block is content, not a
+  delimiter. Do **not** reuse `match_diagram_slide`'s scanner, which only tracks
+  diagram languages.
 - Exactly one `# Title` (via `_H1_RE`).
-- After the title, the first non-blank line must be a delimiter; the body then
-  holds **exactly three** delimiter lines: open, separator, close.
+- After the title, the first non-blank line must be a delimiter. *(Critique
+  P1):* **any non-blank content between `# Title` and the opening `:::`
+  delimiter is fail-loud**, not a silent fall-through — a slide that contains
+  `:::` delimiter lines (outside code fences) but has non-blank content before
+  the first delimiter raises `SystemExit`
+  (`"ERROR: slide '<title>': content preceding the opening ':::' delimiter is "
+  "not supported in two-column slides"`). This honours R5 (no silent
+  passthrough of malformed `:::` markup to pandoc).
+- The body holds **exactly three** delimiter lines: open, separator, close.
 - `left` = verbatim lines between open and separator; `right` = verbatim lines
   between separator and close. Each must have ≥1 non-blank line (else fail-loud:
   empty region).
-- A second `# Title`, content after the closing delimiter, or an unterminated
-  inner fence → fail-loud.
+- A second `# Title`, **non-blank** content after the closing delimiter
+  (trailing blank lines/whitespace are ignored), or an unterminated inner fence
+  → fail-loud. When the offending slide has no parseable `# Title`, the
+  fail-loud message falls back to a near-`:::` snippet or the slide index so the
+  error still identifies the slide (critique E3-adjacent).
 
 A small helper `classify_region(region) -> ("image", alt, path) | ("diagram",
 lang, source) | ("markdown", text)` decides a region's render mode by reusing
@@ -140,10 +161,21 @@ non-blank content → that mode; otherwise `markdown`).
 
 ### `engine.py` — lowering
 
-Add `column_body_tex(alt, path) -> str`: identical to `picture_body_tex` but
-scoped to the column — `width=\columnwidth,height=0.78\textheight,keepaspectratio`.
-(Refactor `picture_body_tex` to share a private `_fit_image_tex(width_expr, alt,
-path)` so both stay in lockstep.)
+Add `column_body_tex(alt, path) -> str`: a column-scoped fit-image block
+(`width=\columnwidth,height=0.72\textheight,keepaspectratio`, horizontally
+centred, optional `captioncolor` caption). *(Critique P2):* `column_body_tex`
+**must not** wrap the image in `\vfill … \vfill` — vertical centring would
+break the locked `align=top` contract (R4) and detach the image from the
+companion text column. It emits a top-aligned
+`{\centering\includegraphics[...]\par <caption>}` block instead; the `\vfill`
+vertical centring remains **only** in the whole-slide `picture_body_tex`.
+*(Critique E6):* the height bound is `0.72\textheight` (not `0.78`) so a
+multi-line caption cannot overflow a 16:9 frame. Refactor the shared image-fit
+emission into a private helper `_fit_image_tex(width_expr, height_expr, alt,
+path, *, vcenter: bool)` so `picture_body_tex` (`vcenter=True`,
+`width=\textwidth`, `height=0.78\textheight`) and `column_body_tex`
+(`vcenter=False`, `width=\columnwidth`, `height=0.72\textheight`) stay in
+lockstep.
 
 In `preprocess_body`, before the picture/diagram branches, test
 `match_two_column_slide`. On a dict, build each region's inner block:
@@ -152,12 +184,16 @@ In `preprocess_body`, before the picture/diagram branches, test
   `column_body_tex("", img.name)` in a raw block.
 - `markdown` → the region text verbatim (pandoc renders it).
 
-Then emit (Q4, R2, R4), with distinct outer/inner fence lengths per §10.6:
+Then emit (Q4, R2, R4), with distinct outer/inner fence lengths per §10.6.
+*(Critique E1):* the outer columns div carries `.onlytextwidth` so Beamer
+constrains the two columns to `\textwidth` (lowering to
+`\begin{columns}[T,onlytextwidth]`) instead of defaulting to `\paperwidth`,
+which would bleed column content into the theme margins and logos:
 
 ```text
 # <title>
 
-:::::: {.columns align=top}
+:::::: {.columns .onlytextwidth align=top}
 :::: {.column width="50%"}
 <left inner block>
 ::::
@@ -250,8 +286,27 @@ fence that fails to render (→ fail-loud via `render_diagram`).
 | `:::` grammar = three delimiter lines | Questionnaire Q1 `default-applied` | open / separator / close; fence-aware; other counts fail loud. |
 | Trigger = `# Title` + body opening with `:::` | Questionnaire Q2 `default-applied` | Opt-in; all other slides untouched (R6). |
 | Fit mechanism per region | Questionnaire Q3 `default-applied` | Lone image/diagram → fit; else Markdown passthrough; alt → caption. |
-| Pandoc div nesting | Questionnaire Q4 `default-applied` | `::::::  {.columns align=top}` + two `:::: {.column width="50%"}`, distinct fence lengths. |
-| Fail-loud cases/messages | Questionnaire Q5 `default-applied` | Wrong delimiter count, empty region, diagram render failure, unterminated fence; slide-identifying messages. |
+| Pandoc div nesting | Questionnaire Q4 `default-applied` + critique E1 | `:::::: {.columns .onlytextwidth align=top}` + two `:::: {.column width="50%"}`, distinct fence lengths. |
+| Fail-loud cases/messages | Questionnaire Q5 `default-applied` + critique P1 | Wrong delimiter count, empty region, pre-delimiter content, post-delimiter content, diagram render failure, unterminated fence; slide-identifying messages. |
+
+### Applied critique — Must-Address (spec-level `--auto`, `two-column-slides-critique.md`)
+
+The spec-level handoff critique produced four 🎯 Must-Address findings, all
+applied above (💡 Recommendations and 🤔 Questions remain in the critique report
+for human review):
+
+- **P1** — Fail-loud on non-blank content between `# Title` and the opening
+  `:::` (no silent passthrough). *(Detection grammar + R5.)*
+- **P2** — `column_body_tex` must not use `\vfill`; the column image is
+  top-aligned, not vertically centred. *(Lowering section + R3.)*
+- **E1** — Emit `.onlytextwidth` on the columns div so columns stay within
+  `\textwidth` and respect theme margins. *(Lowering section + R4.)*
+- **E2** — Use a dedicated general code-fence scanner (`_scan_code_fences`,
+  any language) rather than `match_diagram_slide`'s diagram-only scanner.
+  *(Detection grammar.)*
+
+The height bound was also tightened to `0.72\textheight` (critique E6, folded in
+with P2 since it shares the same emission site).
 
 ### Out of scope (recorded)
 
