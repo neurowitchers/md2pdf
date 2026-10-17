@@ -6,4 +6,9 @@ branding (palette, fonts, logos, title/thank-you frames) as data plus Jinja2
 ``md2pdf.themes`` and are loaded via :mod:`importlib.resources`.
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+try:
+    __version__ = _pkg_version("md2pdf")
+except PackageNotFoundError:  # pragma: no cover - only without an install
+    __version__ = "unknown"

@@ -32,7 +32,18 @@ def test_version_exits_zero(capsys):
     with pytest.raises(SystemExit) as ei:
         cli.main(["--version"])
     assert ei.value.code == 0
-    assert "md2pdf" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "md2pdf" in out
+
+
+def test_version_matches_installed_metadata(capsys):
+    """`--version` is single-sourced from installed package metadata."""
+    from importlib.metadata import version as pkg_version
+
+    with pytest.raises(SystemExit):
+        cli.main(["--version"])
+    out = capsys.readouterr().out.strip()
+    assert out == f"md2pdf {pkg_version('md2pdf')}"
 
 
 def test_themes_package_resolves_via_importlib_resources():
